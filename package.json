@@ -2,7 +2,7 @@
   "name": "formr",
   "version": "0.0.1",
   "description": "Make forms",
-  "main": "index.js",
+  "main": "dist/formr.cjs.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -10,10 +10,18 @@
     "type": "git",
     "url": "git+https://github.com/cdock1029/formr.git"
   },
-  "author": "",
+  "author": "Conor Dockry <conordockry@gmail.com>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/cdock1029/formr/issues"
   },
-  "homepage": "https://github.com/cdock1029/formr#readme"
+  "homepage": "https://github.com/cdock1029/formr#readme",
+  "peerDependencies": {
+    "react": ">=16.0.0"
+  },
+  "devDependencies": {
+    "kcd-scripts": "^0.39.2",
+    "react": "^16.4.1",
+    "react-dom": "^16.4.1"
+  }
 }
