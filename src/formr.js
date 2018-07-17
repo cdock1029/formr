@@ -30,68 +30,56 @@ export class Formr extends React.Component {
   // }
 
   _isMounted = false
-  constructor(props) {
-    super(props)
-    this.state = {
-      values: this.props.initialValues,
-
-      fieldNames: Object.entries(this.props.initialValues).map(
-        ([key, value]) => {
-          console.log('entries:', { key, value })
-          let finalKey = key
-          if (Array.isArray(value)) {
-            finalKey = `${key}[]`
-          }
-          return finalKey
-        },
-      ),
-      errors: {},
-      blurred: {},
-      focused: {},
-
-      isSubmitting: false,
-    }
-    // this.state.getPreviousState = props.prevStateGetterBuilder(this.state)
+  buildRefs = initialValues => {
+    return Object.entries(initialValues).reduce((acc, [key, value]) => {
+      if (Array.isArray(value)) {
+        acc[key] = value.map(() => React.createRef())
+        return acc
+      }
+      acc[key] = React.createRef()
+      return acc
+    }, {})
   }
+  state = {
+    errors: {},
+    blurred: {},
+    focused: {},
+    isSubmitting: false,
+    internal: this.props.initialValues,
+  }
+  _refs = this.buildRefs(this.props.initialValues)
+
   componentDidMount() {
+    // console.log({ cdmRefs: this._refs })
     this._isMounted = true
   }
   componentWillUnmount() {
     this._isMounted = false
   }
   componentDidUpdate(prevProps, prevState) {
-    console.log('compDidUPdate', { state: this.state })
+    // console.log('compDidUPdate', { state: this.state })
   }
   handleSubmit = e => {
     if (e && e.preventDefault) {
       e.preventDefault()
       e.persist()
     }
-    console.log({ fieldName: this.state.fieldNames })
-    const elements = e.target.elements
-    window.elements = elements
-    const result = {}
-    this.state.fieldNames.forEach(key => {
-      console.log({ key })
-      if (key.includes('[]')) {
-        console.log('inside array build')
-        result[key] = []
-        elements[key].forEach(node => result[key].push(node.value))
-      } else {
-        result[key] = elements[key].value
+    console.log({ _refs: this._refs })
+    const values = Object.entries(this._refs).reduce((acc, [key, ref]) => {
+      if (Array.isArray(ref)) {
+        acc[key] = ref.map(r => r.current.value)
+        return acc
       }
-    })
-    console.log({ elements, result })
-    // console.table(mapped)
+      acc[key] = ref.current.value
+      return acc
+    }, {})
+
     this.setState(
       () => ({
         isSubmitting: true,
       }),
       () => {
-        this.props.onSubmit({
-          ...this.state,
-          e,
-        })
+        this.props.onSubmit({ ...this.state, values })
       },
     )
   }
@@ -155,27 +143,56 @@ export class Formr extends React.Component {
     let value = this.props.initialValues[field]
     return value
   }
-  getInputProps = ({ name, id, index, ...rest }) => {
-    const field = name ? name : id
-    const indexExists = typeof index !== 'undefined'
-    return {
-      id,
-      name: indexExists ? `${name}[]` : name,
-      type: 'text',
-      // value: indexExists ? undefined : this.getValue({ field, index }),
-
-      defaultValue: indexExists
-        ? this.state.values[field][index]
-        : this.props.initialValues[field],
-      // defaultValue: indexExists ? this.state.initialValues[field][index] : this.state.initialValues[field],
-
-      // onChange: indexExists
-      //   ? undefined
-      //   : e => this.handleChange({ field, value: e.target.value, index }),
-      onBlur: e => this.handleBlur({ field, index }),
-      onFocus: e => this.handleFocus({ field, index }),
-      ...rest,
-    }
+  Input = ({ name, ...rest }) => {
+    return (
+      <input
+        name={name}
+        type="text"
+        defaultValue={this.props.initialValues[name]}
+        ref={this._refs[name]}
+        onChange={e => {
+          const { value } = e.target
+          this.setState(({ internal }) => ({
+            internal: {
+              ...internal,
+              [name]: value,
+            },
+          }))
+        }}
+        onBlur={e => this.handleBlur({ field: name })}
+        onFocus={e => this.handleFocus({ field: name })}
+        {...rest}
+      />
+    )
+  }
+  ArrayInput = ({ name, index, ...rest }) => {
+    const value = this.props.initialValues[name][index]
+    const refArray = this._refs[name]
+    console.log({ name, refArray })
+    return (
+      <input
+        name={`${name}[]`}
+        type="text"
+        defaultValue={value}
+        ref={refArray[index]}
+        onChange={e => {
+          const { value } = e.target
+          this.setState(({ internal }) => {
+            const arr = internal[name]
+            arr.splice(index, 1, value)
+            return {
+              internal: {
+                ...internal,
+                [name]: arr,
+              },
+            }
+          })
+        }}
+        onBlur={e => this.handleBlur({ field: name, index })}
+        onFocus={e => this.handleFocus({ field: name, index })}
+        {...rest}
+      />
+    )
   }
   arrayAdd = (field, newValue = '') => {
     this.setState(({ values }) => {
@@ -196,7 +213,8 @@ export class Formr extends React.Component {
     return children({
       ...this.state,
       initialValues,
-      getInputProps: this.getInputProps,
+      Input: this.Input,
+      ArrayInput: this.ArrayInput,
       actions: {
         handleSubmit: this.handleSubmit,
         arrayAdd: this.arrayAdd,
