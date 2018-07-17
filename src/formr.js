@@ -59,13 +59,11 @@ export class Formr extends React.Component {
       e.preventDefault()
       e.persist()
     }
-    console.log({ _refs: this._refs })
-
     const values = Array.from(this._refs.entries()).reduce(
       (acc, [key, ref]) => {
         if (ref instanceof Map) {
           acc[key] = Array.from(ref.values()).map(
-            r => r.current && r.current.value,
+            ({ key, ref: r }) => r.current && r.current.value,
           )
         } else {
           acc[key] = ref.current.value
@@ -134,7 +132,7 @@ export class Formr extends React.Component {
       return {
         key,
         remove: () => this.arrayRemove(field, key, order),
-        insert: (newValue = '') => this.arrayInsert(field, newValue, order),
+        insert: () => this.arrayInsert(field, order),
       }
     })
   }
@@ -163,12 +161,11 @@ export class Formr extends React.Component {
   ArrayInput = ({ name, index, ...rest }) => {
     let value = this.state.initialValues[name][index]
     const refMap = this._refs.get(name)
-    console.log({ refMap })
-    // const refArray = Array.from(refMap.values())
+    const { ref } = refMap.get(index)
 
-    // if (refArray[index].current) {
-    //   console.log('current exists:', refArray[index].current)
-    //   value = refArray[index].current.value
+    // if (ref && ref.current) {
+    //   console.log('current exists:', ref.current)
+    //   value = ref.current.value
     // }
     console.log({ index, value })
     return (
@@ -176,20 +173,7 @@ export class Formr extends React.Component {
         name={`${name}[]`}
         type="text"
         defaultValue={value}
-        ref={refMap.get(index).ref}
-        // onChange={e => {
-        //   const { value } = e.target
-        //   this.setState(({ values }) => {
-        //     const arr = values[name]
-        //     arr.splice(index, 1, value)
-        //     return {
-        //       values: {
-        //         ...values,
-        //         [name]: arr,
-        //       },
-        //     }
-        //   })
-        // }}
+        ref={ref}
         onBlur={e => this.handleBlur({ field: name, index })}
         onFocus={e => this.handleFocus({ field: name, index })}
         {...rest}
@@ -197,42 +181,43 @@ export class Formr extends React.Component {
     )
   }
 
-  arrayInsert = (name, newValue = '', index = null) => {
+  arrayInsert = (name, index = null) => {
     const refMap = this._refs.get(name)
 
     const entries = Array.from(refMap.entries()) // order => {ref, key}
     entries.sort(([order1, e1], [order2, e2]) => order1 - order2)
 
+    const values = entries.map(([order, val]) => val)
+
     const order = index !== null ? index : entries.length
-    entries.splice(order, 0, [
-      order,
-      { ref: React.createRef(), key: this.key++ },
-    ])
+    values.splice(order, 0, { ref: React.createRef(), key: this.key++ })
 
     refMap.clear()
 
-    console.log({ entries })
-    entries.forEach(([_, val], index) => {
+    console.log({ values })
+    values.forEach((val, index) => {
       refMap.set(index, val)
     })
     console.log('after insert:', { entries: Array.from(refMap.entries()) })
-    this.forceUpdate()
+    // this.forceUpdate()
 
-    // this.setState(({ initialValues }) => {
-    //   const arr = initialValues[name] ? initialValues[name] : []
-    //   arr.splice(index !== null ? index : arr.length, 0, newValue)
-    //   return {
-    //     initialValues: {
-    //       ...initialValues,
-    //       [name]: arr,
-    //     },
-    //   }
-    // })
+    this.setState(({ initialValues }) => {
+      const arr = initialValues[name] ? initialValues[name] : []
+      arr.splice(index !== null ? index : arr.length, 0, '')
+      console.log({ arr, index })
+      return {
+        initialValues: {
+          ...initialValues,
+          [name]: arr,
+        },
+      }
+    })
   }
-  arrayAdd = (name, newValue = '') => this.arrayInsert(name, newValue)
+  arrayAdd = name => this.arrayInsert(name)
   arrayRemove = (name, key, index) => {
+    console.log('removing', { name, key, index })
     const refMap = this._refs.get(name)
-    refMap.delete(key)
+    refMap.delete(index)
 
     const refEntries = Array.from(refMap.entries()) // order => {ref, key}
     refEntries.sort(([order1, e1], [order2, e2]) => order1 - order2)
@@ -243,17 +228,17 @@ export class Formr extends React.Component {
       refMap.set(index, val)
     })
 
-    this.forceUpdate(() => {})
-    // this.setState(({ initialValues }) => {
-    //   const arr = initialValues[name]
-    //   arr.splice(index, 1)
-    //   return {
-    //     initialValues: {
-    //       ...initialValues,
-    //       [name]: arr,
-    //     },
-    //   }
-    // })
+    // this.forceUpdate(() => {})
+    this.setState(({ initialValues }) => {
+      const arr = initialValues[name]
+      arr.splice(index, 1)
+      return {
+        initialValues: {
+          ...initialValues,
+          [name]: arr,
+        },
+      }
+    })
   }
   render() {
     console.log('render')
