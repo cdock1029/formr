@@ -2,9 +2,10 @@
   "name": "formr",
   "version": "0.0.1",
   "description": "Make forms",
-  "main": "dist/formr.cjs.js",
+  "main": "dist/formr.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "kcd-scripts build",
+    "test": "kcd-scripts test"
   },
   "repository": {
     "type": "git",
@@ -20,8 +21,12 @@
     "react": ">=16.0.0"
   },
   "devDependencies": {
+    "date-fns": "^2.0.0-alpha.11",
+    "jest-dom": "^1.8.1",
     "kcd-scripts": "^0.39.2",
     "react": "^16.4.1",
-    "react-dom": "^16.4.1"
-  }
+    "react-dom": "^16.4.1",
+    "react-testing-library": "^4.1.2"
+  },
+  "dependencies": {}
 }
