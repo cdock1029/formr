@@ -28,13 +28,14 @@ export class Formr extends React.Component {
           this._meta[key].getNextKey = () => {
             return this._meta[key]._nextKey++
           }
-          val.forEach((v, i) => {
-            acc[`${key}_${i}`] = {
-              value: v,
+          const objArray = val.map((item, i) => {
+            return {
+              value: item,
               order: i,
               key: this._meta[key].getNextKey(),
             }
           })
+          acc[key] = objArray
         } else {
           acc[key] = val
         }
@@ -51,16 +52,16 @@ export class Formr extends React.Component {
     }
   }
 
-  static getDerivedStateFromProps(props, state) {
-    const toDelete = Object.entries(state).find(
-      ([key, value]) => typeof value === 'undefined',
-    )
-    if (toDelete) {
-      delete state[toDelete[0]]
-      return state
-    }
-    return null
-  }
+  // static getDerivedStateFromProps(props, state) {
+  //   const toDelete = Object.entries(state).find(
+  //     ([key, value]) => typeof value === 'undefined',
+  //   )
+  //   if (toDelete) {
+  //     delete state[toDelete[0]]
+  //     return state
+  //   }
+  //   return null
+  // }
 
   componentDidMount() {
     this._isMounted = true
@@ -124,14 +125,22 @@ export class Formr extends React.Component {
       }
     })
   }
-  handleChange = e => {
-    const { name, value } = e.target
-    this.setState(prev => ({
-      [name]: {
-        ...prev[name],
-        value,
-      },
-    }))
+  handleChange = (e, { name, index }) => {
+    const { value } = e.target
+    this.setState(prev => {
+      if (index === null) {
+        return {
+          [name]: value,
+        }
+      }
+      // update the array..
+      const arr = prev[name]
+      const prevObj = arr[index]
+      arr.splice(index, 1, { ...prevObj, value })
+      return {
+        [name]: arr,
+      }
+    })
   }
   Input = ({ name, ...rest }) => {
     return (
@@ -155,19 +164,35 @@ export class Formr extends React.Component {
       />
     )
   }
-  ArrayInput = ({ name, index, ...rest }) => {
-    const indexifiedName = `${name}_${index}`
-    const value = this.state[indexifiedName].value // {order, key, value}
+  ArrayInput = ({ name, index, children, ...rest }) => {
+    const suffixedName = `${name}_${index}`
 
-    console.log({ indexifiedName, value })
+    if (typeof children === 'function') {
+      return children({
+        getProps: () => ({
+          onBlur: e => this.handleBlur({ field: name, index }),
+          onFocus: e => this.handleFocus({ field: name, index }),
+          onChange: e => this.handleChange(e, { name, index }),
+          name: suffixedName,
+          type: 'text',
+          ...rest,
+        }),
+        insert: () => {
+          alert('inserted')
+        },
+        remove: () => {
+          alert('removed')
+        },
+      })
+    }
+
     return (
       <input
-        name={indexifiedName}
+        name={suffixedName}
         type="text"
         onBlur={e => this.handleBlur({ field: name, index })}
         onFocus={e => this.handleFocus({ field: name, index })}
-        onChange={this.handleChange}
-        value={value}
+        onChange={e => this.handleChange(e, { name, index })}
         {...rest}
       />
     )
@@ -243,15 +268,17 @@ export class Formr extends React.Component {
       },
     )
   }
-  getArray = prefix => {
-    const values = this.getSortedArrayValues(prefix)
-    const items = values.map((val, i) => ({
+  getArray = name => {
+    const arr = this.state[name]
+    // const values = this.getSortedArrayValues(prefix)
+    console.log({ arr })
+    const items = arr.map((val, i) => ({
       ...val,
       order: i,
-      name: `${prefix}_${i}`,
+      name: `${name}_${i}`,
       actions: {
-        insert: () => this.arrayInsert(prefix, val.order),
-        remove: () => this.arrayRemove(prefix, val.key),
+        insert: () => this.arrayInsert(name, val.order),
+        remove: () => this.arrayRemove(name, val.key),
       },
     }))
 
