@@ -16,43 +16,60 @@ export class Formr extends React.Component {
     onSubmit: () => {},
   }
   _isMounted = false
-  _refs = new Map()
-  key = 0
-  buildRefs = initialValues => {
-    Object.entries(initialValues).forEach(([key, value]) => {
-      if (Array.isArray(value)) {
-        const mapForArr = new Map()
-        value.forEach((_, index) => {
-          mapForArr.set(index, { ref: React.createRef(), key: this.key++ })
-        })
-        this._refs.set(key, mapForArr)
-      } else {
-        this._refs.set(key, React.createRef())
-      }
-    })
-    console.log({ constructorRefs: this._refs })
-  }
+  _meta = {}
   constructor(props) {
     super(props)
+    const values = Object.entries(this.props.initialValues).reduce(
+      (acc, [key, val]) => {
+        if (Array.isArray(val)) {
+          this._meta[key] = {
+            _nextKey: 0, // monotonic
+          }
+          this._meta[key].getNextKey = () => {
+            return this._meta[key]._nextKey++
+          }
+          val.forEach((v, i) => {
+            acc[`${key}_${i}`] = {
+              value: v,
+              order: i,
+              key: this._meta[key].getNextKey(),
+            }
+          })
+        } else {
+          acc[key] = val
+        }
+        return acc
+      },
+      {},
+    )
     this.state = {
-      errors: {},
-      blurred: {},
-      focused: {},
-      isSubmitting: false,
-      initialValues: this.props.initialValues,
+      _errors: {},
+      _blurred: {},
+      _focused: {},
+      _isSubmitting: false,
+      ...values,
     }
-    this.buildRefs(this.props.initialValues)
+  }
+
+  static getDerivedStateFromProps(props, state) {
+    const toDelete = Object.entries(state).find(
+      ([key, value]) => typeof value === 'undefined',
+    )
+    if (toDelete) {
+      delete state[toDelete[0]]
+      return state
+    }
+    return null
   }
 
   componentDidMount() {
-    console.log({ cdmRefs: this._refs })
     this._isMounted = true
   }
   componentWillUnmount() {
     this._isMounted = false
   }
   componentDidUpdate(prevProps, prevState) {
-    // console.log('compDidUPdate', { state: this.state })
+    console.log('compDidUPdate', { prevState, state: this.state })
   }
   handleSubmit = e => {
     if (e && e.preventDefault) {
@@ -85,16 +102,11 @@ export class Formr extends React.Component {
   handleBlur = ({ field, index }) => {
     console.log('handleBlur', field)
     this.setState(
-      ({ blurred }) => {
-        let fieldValue = true
-        if (index !== undefined) {
-          fieldValue = blurred[field] || []
-          fieldValue[index] = true
-        }
+      ({ _blurred }) => {
         return {
-          blurred: {
-            ...blurred,
-            [field]: fieldValue,
+          _blurred: {
+            ..._blurred,
+            [field]: true,
           },
         }
       },
@@ -103,46 +115,29 @@ export class Formr extends React.Component {
   }
   handleFocus = ({ field, index }) => {
     console.log('handleFocus', field)
-    this.setState(({ focused }) => {
-      let fieldValue = true
-      if (index !== undefined) {
-        fieldValue = focused[field] || []
-        fieldValue[index] = true
-      }
+    this.setState(({ _focused }) => {
       return {
-        focused: {
-          ...focused,
-          [field]: fieldValue,
+        _focused: {
+          ..._focused,
+          [field]: true,
         },
       }
     })
   }
-  getValue = ({ field, index }) => {
-    let value = this.state.initialValues[field]
-    return value
-  }
-  getArray = field => {
-    const refMap = this._refs.get(field) // order => {ref, key}
-    const temp = Array.from(refMap.entries())
-
-    temp.sort(([order1, e1], [order2, e2]) => order1 - order2)
-    console.log({ temp })
-
-    return temp.map(([order, { key }]) => {
-      return {
-        key,
-        remove: () => this.arrayRemove(field, key, order),
-        insert: () => this.arrayInsert(field, order),
-      }
-    })
+  handleChange = e => {
+    const { name, value } = e.target
+    this.setState(prev => ({
+      [name]: {
+        ...prev[name],
+        value,
+      },
+    }))
   }
   Input = ({ name, ...rest }) => {
     return (
       <input
         name={name}
         type="text"
-        defaultValue={this.state.initialValues[name]}
-        ref={this._refs.get(name)}
         // onChange={e => {
         //   const { value } = e.target
         //   this.setState(({ values }) => ({
@@ -154,91 +149,113 @@ export class Formr extends React.Component {
         // }}
         onBlur={e => this.handleBlur({ field: name })}
         onFocus={e => this.handleFocus({ field: name })}
+        onChange={this.handleChange}
+        value={this.state[name]}
         {...rest}
       />
     )
   }
   ArrayInput = ({ name, index, ...rest }) => {
-    let value = this.state.initialValues[name][index]
-    const refMap = this._refs.get(name)
-    const { ref } = refMap.get(index)
+    const indexifiedName = `${name}_${index}`
+    const value = this.state[indexifiedName].value // {order, key, value}
 
-    // if (ref && ref.current) {
-    //   console.log('current exists:', ref.current)
-    //   value = ref.current.value
-    // }
-    console.log({ index, value })
+    console.log({ indexifiedName, value })
     return (
       <input
-        name={`${name}[]`}
+        name={indexifiedName}
         type="text"
-        defaultValue={value}
-        ref={ref}
         onBlur={e => this.handleBlur({ field: name, index })}
         onFocus={e => this.handleFocus({ field: name, index })}
+        onChange={this.handleChange}
+        value={value}
         {...rest}
       />
     )
   }
+  // getSortedArrayEntries = prefix => {
+  //   const entries = Object.entries(this.state).filter(([key, val]) => key.startsWith(`${prefix}_`))
+  //   entries.sort(([e1K, e1V], [e2K, e2V]) => e1V.order - e2V.order)
+  // }
 
-  arrayInsert = (name, index = null) => {
-    const refMap = this._refs.get(name)
+  // when do we actually need to sort..........?
+  getSortedArrayValues = (prefix, state = this.state) => {
+    const entries = Object.entries(state)
+    const values = entries
+      .filter(([key, _]) => key.startsWith(`${prefix}_`))
+      .map(([_, val]) => val)
+    values.sort((v1, v2) => v1.order - v2.order)
+    return values
+  }
 
-    const entries = Array.from(refMap.entries()) // order => {ref, key}
-    entries.sort(([order1, e1], [order2, e2]) => order1 - order2)
+  arrayInsert = (name, index) => {
+    // spread all array items
+    this.setState(prev => {
+      // ...arrayState,
 
-    const values = entries.map(([order, val]) => val)
+      const nextKey = this._meta[name].getNextKey()
+      const values = this.getSortedArrayValues(name, prev)
 
-    const order = index !== null ? index : entries.length
-    values.splice(order, 0, { ref: React.createRef(), key: this.key++ })
+      // insert new item into values array
+      values.splice(index, 0, { value: '', key: nextKey }) // [ {order, key, value}, ...]
 
-    refMap.clear()
-
-    console.log({ values })
-    values.forEach((val, index) => {
-      refMap.set(index, val)
-    })
-    console.log('after insert:', { entries: Array.from(refMap.entries()) })
-    // this.forceUpdate()
-
-    this.setState(({ initialValues }) => {
-      const arr = initialValues[name] ? initialValues[name] : []
-      arr.splice(index !== null ? index : arr.length, 0, '')
-      console.log({ arr, index })
-      return {
-        initialValues: {
-          ...initialValues,
-          [name]: arr,
-        },
-      }
+      // build and re-order based on current position
+      return values.reduce((acc, value, index) => {
+        acc[`${name}_${index}`] = { ...value, order: index }
+        return acc
+      }, {})
     })
   }
-  arrayAdd = name => this.arrayInsert(name)
-  arrayRemove = (name, key, index) => {
-    console.log('removing', { name, key, index })
-    const refMap = this._refs.get(name)
-    refMap.delete(index)
+  arrayAdd = name => {
+    // just adding new one at the end
+    const nextKey = this._meta[name].getNextKey()
+    const nextIndex = this.getSortedArrayValues(name).length
 
-    const refEntries = Array.from(refMap.entries()) // order => {ref, key}
-    refEntries.sort(([order1, e1], [order2, e2]) => order1 - order2)
+    this.setState(() => ({
+      [`${name}_${nextIndex}`]: { value: '', order: nextIndex, key: nextKey },
+    }))
+  }
+  arrayRemove = (name, key) => {
+    this.setState(
+      prev => {
+        // all state prefixed keys need to be reset..
 
-    refMap.clear()
+        // get all items, sorted
+        const values = this.getSortedArrayValues(name, prev)
 
-    refEntries.forEach(([_, val], index) => {
-      refMap.set(index, val)
-    })
+        // find one that has the key we're looking for
+        const item = values.find(v => v.key === key)
 
-    // this.forceUpdate(() => {})
-    this.setState(({ initialValues }) => {
-      const arr = initialValues[name]
-      arr.splice(index, 1)
-      return {
-        initialValues: {
-          ...initialValues,
-          [name]: arr,
-        },
-      }
-    })
+        // removed based on that items order value
+        // values.splice(item.order, 1) // [{order, key, value}, {order, key, value}, ...]
+
+        // build and re-order items
+        // const newState = Object.entries(prev).reduce((item, order) => {
+        //   return {
+        //     [`${name}_${order}`]: { ...item, order },
+        //   }
+        // }, {})
+        return {
+          [`${name}_${item.order}`]: undefined,
+        }
+      },
+      () => {
+        console.log('after arrayRemove:', { state: this.state })
+      },
+    )
+  }
+  getArray = prefix => {
+    const values = this.getSortedArrayValues(prefix)
+    const items = values.map((val, i) => ({
+      ...val,
+      order: i,
+      name: `${prefix}_${i}`,
+      actions: {
+        insert: () => this.arrayInsert(prefix, val.order),
+        remove: () => this.arrayRemove(prefix, val.key),
+      },
+    }))
+
+    return items
   }
   render() {
     console.log('render')
@@ -251,9 +268,24 @@ export class Formr extends React.Component {
       ArrayInput,
       getArray,
     } = this
+
+    const {
+      _errors: errors,
+      _blurred: blurred,
+      _focused: focused,
+      _isSubmitting: isSubmitting,
+      ...values
+    } = this.state
+
     return children({
-      ...this.state,
+      errors,
+      blurred,
+      focused,
+      isSubmitting,
+
       initialValues,
+      values,
+
       Input,
       ArrayInput,
       getArray,
